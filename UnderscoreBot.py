@@ -1,7 +1,11 @@
-#!/usr/bin/python
+#!/usr/bin/python2
 """
     Miscellaneous bot
 """
+
+import sys
+sys.path.append("/u/hyphen/lib/python")
+
 print __file__
 
 # twisted imports
@@ -50,7 +54,8 @@ class UnderscoreBot(irc.IRCClient):
         #self.addHandler(EasterEggHandler())
         for plugin in config['core']['plugins']['autoload']:
             self.addHandler(plugin[0], plugin[1])
-    
+        self.logger.write("Plugins loaded")
+
     def addCallback(self, function):
         self.callbacks.append(function)
         print "Added callback: %s" % function
@@ -69,10 +74,13 @@ class UnderscoreBot(irc.IRCClient):
 
     def connectionLost(self, reason):
         irc.IRCClient.connectionLost(self, reason)
-        self.logger.write("Connection lost")
+        self.logger.write("Connection lost: {}".format(reason))
 
     def lineReceived(self, line):
         #self.logger.write(" --> " + line, "raw", echo=False)
+	if "You are now identified for" in line: 
+	    self.logger.write("nickserv said ok")
+	    self.joinChannels()
         irc.IRCClient.lineReceived(self, line)
 
     def sendLine(self, line):
@@ -92,12 +100,19 @@ class UnderscoreBot(irc.IRCClient):
         self.logger.write("Signed on")
         self.logger.write("Identifying to nickserv as %s" % (self.config['irc']['nick']))
         self.msg("nickserv", "identify %s %s" % (self.config["irc"]["nick"], self.config["irc"]["nickserv_password"]))
-        if self.autojoin:
-            for channel, key in self.autojoin_list:
-                self.join(channel, key)
+#        if self.autojoin:
+#            self.logger.write("Joining channels")
+#            for channel, key in self.autojoin_list:
+#                self.join(channel, key)
         self.logger.write("Nick is %s" % self.nickname)
         self.logger.write("Calling snot monitoring in subthread")
         reactor.callInThread(SNOTMagic.monitorLogs, self)
+
+    def joinChannels(self):
+        if self.autojoin:
+            self.logger.write("Joining channels")
+            for channel, key in self.autojoin_list:
+                self.join(channel, key)
 
     def isAChannel(self,target):
         if len(target) > 0 and target[0] in ("#", "&", "+", "!"):
@@ -108,7 +123,7 @@ class UnderscoreBot(irc.IRCClient):
     def privmsg(self, user, channel, msg):
         """This will get called when the bot receives a message."""
         user = user.split('!', 1)[0]
-        
+
         #self.mode("#wrentest2", True, "c");
         if msg == "modes?":
             def modesCallback(prefix, command, params):
@@ -173,6 +188,8 @@ class UnderscoreBot(irc.IRCClient):
             self.logger.write("No such module: %s" % moduleName)
         except AttributeError:
             self.logger.write("No such attritube: %s.%s" % (moduleName, handlerName))
+        except:
+            self.logger.write("Something else happened")
     def seeNames(self):
         return sys.modules
     # irc callbacks
@@ -200,10 +217,12 @@ class UnderscoreBotFactory(protocol.ClientFactory):
         return p
 
     def clientConnectionLost(self, connector, reason):
+        self.logger.write("Something bad happened: {}".format(reason))
         """If we get disconnected, reconnect to server."""
         connector.connect()
 
     def clientConnectionFailed(self, connector, reason):
+        self.logger.write("Something bad happened: {}".format(reason))
         print "connection failed:", reason
         reactor.stop()
 
